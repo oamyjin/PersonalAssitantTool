@@ -8,4 +8,4 @@ All data stays in your browser's local storage on the device you use — nothing
 
 ## Idea
 
-The idea for this tool comes from [神・時間術](https://www.goodreads.com/zh/book/show/43482621): the first step to managing your time and focus is learning your own distribution — where your time and attention actually go — before trying to optimize it.
+The idea for this tool comes from the book [神・時間術](https://www.goodreads.com/zh/book/show/43482621): the first step to managing your time and focus is learning your own distribution — where your time and attention actually go — before trying to optimize it.
