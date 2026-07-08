@@ -196,6 +196,20 @@
   }
   .task-item:first-of-type { border-top: none; }
   .task-item span.done { text-decoration: line-through; color: var(--muted); }
+  .date-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .date-row:first-of-type { border-top: none; }
+  .date-row:hover { color: var(--accent); }
+  .date-row.sel { color: var(--accent); font-weight: 700; }
+  .date-row .count { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .date-row.sel .count { color: var(--accent); }
   .trace-head {
     display: flex;
     justify-content: space-between;
@@ -468,6 +482,11 @@
       <details class="panel">
         <summary>Dashboard</summary>
         <div class="details-body">
+          <details class="panel" style="margin-top:0">
+            <summary>Dates · <span id="dashboardDateLabel"></span></summary>
+            <div class="details-body" id="dashboardDateList"></div>
+          </details>
+
           <div class="stats" id="stats"></div>
 
           <div class="panel hour-strip-panel">
@@ -484,7 +503,7 @@
           </div>
 
           <div class="panel" style="padding:14px">
-            <h2>Recent sessions</h2>
+            <h2>Sessions</h2>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -513,6 +532,7 @@ let data = {
 let focusVal = 4;
 let editingId = null;
 let personalTouched = false;
+let dashboardDate = todayISO();
 
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function dateObj(s){ return new Date(s + "T00:00:00"); }
@@ -698,6 +718,9 @@ function inferCategory(x){
 }
 function init(){
   load();
+  if(data.sessions.length) {
+    dashboardDate = [...data.sessions].sort((a,b) => b.date.localeCompare(a.date))[0].date;
+  }
   document.getElementById("today").textContent = new Date().toDateString();
   document.getElementById("date").value = todayISO();
   document.getElementById("weekStart").value = data.weekStart;
@@ -862,13 +885,33 @@ function renderDaily(){
     </div>
   `).join("") : '<div class="empty">No daily items yet. Add the first block above.</div>';
 }
+function dashboardDates(){
+  const dates = new Set(data.sessions.map(x => x.date));
+  dates.add(dashboardDate);
+  return [...dates].sort((a,b) => b.localeCompare(a));
+}
+function selectDashboardDate(d){
+  dashboardDate = d;
+  renderDashboard();
+}
+window.selectDashboardDate = selectDashboardDate;
+function renderDashboardDates(){
+  document.getElementById("dashboardDateLabel").textContent = dashboardDate;
+  document.getElementById("dashboardDateList").innerHTML = dashboardDates().map(d => {
+    const count = data.sessions.filter(x => x.date === d).length;
+    return `<div class="date-row${d === dashboardDate ? " sel" : ""}" onclick="selectDashboardDate('${d}')">
+      <span>${d}</span><span class="count">${count} item${count === 1 ? "" : "s"}</span>
+    </div>`;
+  }).join("");
+}
 function renderDashboard(){
-  const week = data.sessions.filter(inWeek);
-  const totalH = week.reduce((a,b) => a + b.hrs, 0);
-  const scored = week.filter(hasScore);
+  renderDashboardDates();
+  const day = data.sessions.filter(x => x.date === dashboardDate);
+  const totalH = day.reduce((a,b) => a + b.hrs, 0);
+  const scored = day.filter(hasScore);
   const avgFocus = scored.length ? scored.reduce((a,b) => a + (b.focus || 0), 0) / scored.length : 0;
-  const research = week.filter(x => x.category === "Research / work").reduce((a,b) => a + b.hrs, 0);
-  const personal = week.filter(x => x.category === "Personal / life").reduce((a,b) => a + b.hrs, 0);
+  const research = day.filter(x => x.category === "Research / work").reduce((a,b) => a + b.hrs, 0);
+  const personal = day.filter(x => x.category === "Personal / life").reduce((a,b) => a + b.hrs, 0);
   document.getElementById("stats").innerHTML = [
     [totalH.toFixed(1), "tracked hrs"],
     [research.toFixed(1), "research hrs"],
@@ -878,7 +921,7 @@ function renderDashboard(){
 
   const hourScore = Array(24).fill(0);
   const hourWeight = Array(24).fill(0);
-  week.forEach(x => {
+  day.forEach(x => {
     const start = minutesFromTime(x.start);
     let end = minutesFromTime(x.end);
     if(start === null || end === null || !hasScore(x)) return;
@@ -902,7 +945,7 @@ function renderDashboard(){
   }).join("");
 
   const byCat = {};
-  week.forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.hrs);
+  day.forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.hrs);
   const entries = Object.entries(byCat).sort((a,b) => b[1] - a[1]);
   const max = Math.max(...entries.map(e => e[1]), 1);
   document.getElementById("catChart").innerHTML = entries.length ? entries.map(([c,h],i) => `
@@ -911,9 +954,9 @@ function renderDashboard(){
       <div class="bar-track"><div class="bar-fill" style="width:${h / max * 100}%;background:${COLORS[i % COLORS.length]}"></div></div>
       <span class="val">${h.toFixed(1)}h</span>
     </div>
-  `).join("") : '<div class="empty">No sessions this week.</div>';
+  `).join("") : '<div class="empty">No sessions on this date.</div>';
 
-  const sorted = [...data.sessions].sort((a,b) => (b.date + b.start).localeCompare(a.date + a.start)).slice(0,30);
+  const sorted = [...day].sort((a,b) => (b.start || "").localeCompare(a.start || ""));
   document.getElementById("log").innerHTML = sorted.length ? sorted.map(x => `
     <tr>
       <td>${x.date.slice(5)}</td>
@@ -923,7 +966,7 @@ function renderDashboard(){
       <td>${focusDots(x)}</td>
       <td><button class="btn icon" onclick="delS(${x.id})">×</button></td>
     </tr>
-  `).join("") : '<tr><td colspan="6" class="empty">No sessions yet.</td></tr>';
+  `).join("") : '<tr><td colspan="6" class="empty">No sessions on this date.</td></tr>';
 }
 function render(){
   const ws = data.weekStart || mondayOf(todayISO());
@@ -1173,7 +1216,11 @@ let saveHandle = null;
 function idb(){ return new Promise((res, rej) => { const r = indexedDB.open("ft-fs", 1); r.onupgradeneeded = () => r.result.createObjectStore("h"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
 async function idbSet(k, v){ const db = await idb(); return new Promise((res, rej) => { const t = db.transaction("h", "readwrite"); t.objectStore("h").put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); }); }
 async function idbGet(k){ const db = await idb(); return new Promise((res, rej) => { const t = db.transaction("h", "readonly"); const rq = t.objectStore("h").get(k); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => rej(rq.error); }); }
-function fsSupported(){ return typeof window.showSaveFilePicker === "function"; }
+function fsSupported(){
+  // Chrome auto-aborts showSaveFilePicker on file:// pages (no dialog ever shown),
+  // so treat it as unsupported there and use the plain download fallback instead.
+  return typeof window.showSaveFilePicker === "function" && location.protocol !== "file:";
+}
 function setXlsxStatus(txt, ok){ const el = document.getElementById("xlsxStatus"); if (el) { el.textContent = txt; el.style.color = ok ? "var(--accent)" : "var(--muted)"; } }
 async function ensurePermission(handle, mode = "readwrite"){
   if (!handle) return false;
