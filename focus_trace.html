@@ -201,8 +201,8 @@
     margin-top: 7px;
     padding: 3px 7px;
     border-radius: 999px;
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: #eff4f9;
+    color: var(--blue);
     font-family: var(--mono);
     font-size: 11px;
     font-weight: 700;
@@ -1021,8 +1021,8 @@ function renderTodoOptions(forceValue){
   const todos = allTodosForDate(date);
   select.innerHTML = [
     `<option value="auto">Auto match${auto ? `: ${escapeHtml(auto.label)} / ${escapeHtml(auto.text)}` : ""}</option>`,
-    `<option value="">No linked todo</option>`,
-    ...todos.map(todo => `<option value="${todo.id}">${escapeHtml(todo.label)} / ${escapeHtml(todo.text)}${todo.done ? " (done)" : ""}</option>`)
+    ...todos.map(todo => `<option value="${todo.id}">${escapeHtml(todo.label)} / ${escapeHtml(todo.text)}${todo.done ? " (done)" : ""}</option>`),
+    `<option value="">No linked todo</option>`
   ].join("");
   select.value = [...select.options].some(o => o.value === String(current)) ? String(current) : "auto";
 }
@@ -1399,17 +1399,35 @@ function buildXlsx(sessions){
   dash.push([S("Date"), S("Hours"), S("Avg focus"), S("Items")]);
   dates.forEach(dt => { const m = dateMap[dt]; dash.push([S(dt), N(+m.h.toFixed(2)), m.fN ? N(+(m.fSum / m.fN).toFixed(2)) : S(""), N(m.n)]); });
 
+  const weekSetup = [[S("Week Start"), S("Area"), S("Task"), S("Done")]];
+  AREAS.forEach(area => {
+    ((data.tasks && data.tasks[area]) || []).forEach(task => {
+      weekSetup.push([S(data.weekStart || ""), S(AREA_LABELS[area] || area), S(task.text || ""), S(task.done ? "Yes" : "No")]);
+    });
+  });
+
+  const dailyTodos = [[S("Date"), S("Area"), S("Todo"), S("Done")]];
+  Object.keys(data.dailyTodos || {}).sort().forEach(date => {
+    AREAS.forEach(area => {
+      (((data.dailyTodos[date] || {})[area]) || []).forEach(todo => {
+        dailyTodos.push([S(date), S(AREA_LABELS[area] || area), S(todo.text || ""), S(todo.done ? "Yes" : "No")]);
+      });
+    });
+  });
+
   const files = [
     { name: "[Content_Types].xml", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`) },
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`) },
     { name: "_rels/.rels", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`) },
     { name: "xl/workbook.xml", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sessions" sheetId="1" r:id="rId1"/><sheet name="Dashboard" sheetId="2" r:id="rId2"/></sheets></workbook>`) },
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sessions" sheetId="1" r:id="rId1"/><sheet name="Dashboard" sheetId="2" r:id="rId2"/><sheet name="Week Setup" sheetId="3" r:id="rId3"/><sheet name="Daily Todos" sheetId="4" r:id="rId4"/></sheets></workbook>`) },
     { name: "xl/_rels/workbook.xml.rels", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`) },
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/></Relationships>`) },
     { name: "xl/worksheets/sheet1.xml", data: strBytes(sheetXmlFromGrid(log)) },
-    { name: "xl/worksheets/sheet2.xml", data: strBytes(sheetXmlFromGrid(dash)) }
+    { name: "xl/worksheets/sheet2.xml", data: strBytes(sheetXmlFromGrid(dash)) },
+    { name: "xl/worksheets/sheet3.xml", data: strBytes(sheetXmlFromGrid(weekSetup)) },
+    { name: "xl/worksheets/sheet4.xml", data: strBytes(sheetXmlFromGrid(dailyTodos)) }
   ];
   return buildZip(files);
 }
@@ -1447,13 +1465,13 @@ function downloadXlsx(){ // plain fallback -> browser Downloads folder
   a.href = URL.createObjectURL(blob);
   a.download = "focus_trace_all.xlsx";
   a.click();
-  setXlsxStatus(`Downloaded focus_trace_all.xlsx (all ${data.sessions.length} records) to your Downloads folder.`, true);
+  setXlsxStatus(`Downloaded focus_trace_all.xlsx with sessions, week setup, and daily todos to your Downloads folder.`, true);
 }
 async function writeTo(handle){
   const w = await handle.createWritable();
   await w.write(buildXlsx(data.sessions));
   await w.close();
-  setXlsxStatus(`Saved all ${data.sessions.length} records to ${handle.name} · ${new Date().toLocaleTimeString()}`, true);
+  setXlsxStatus(`Saved sessions, week setup, and daily todos to ${handle.name} · ${new Date().toLocaleTimeString()}`, true);
 }
 async function saveXlsx(){
   if (!fsSupported()) { downloadXlsx(); return; }          // Safari/Firefox: normal download
