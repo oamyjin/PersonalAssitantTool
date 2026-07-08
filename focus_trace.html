@@ -196,6 +196,17 @@
   }
   .task-item:first-of-type { border-top: none; }
   .task-item span.done { text-decoration: line-through; color: var(--muted); }
+  .todo-pill {
+    display: inline-block;
+    margin-top: 7px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+  }
   .date-row {
     display: flex;
     justify-content: space-between;
@@ -394,6 +405,10 @@
             <input type="text" id="event" placeholder="e.g. GraphCoT coding">
           </div>
           <div class="wide">
+            <label>Linked todo</label>
+            <select id="todoSelect"></select>
+          </div>
+          <div class="wide">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
               <input type="checkbox" id="personalChk" style="width:auto;margin:0">
               <span>Personal time (no focus score)</span>
@@ -430,6 +445,42 @@
         </div>
         <div class="sub" id="xlsxStatus" style="margin-top:10px;text-align:left">First click on Download XLSX lets you choose where to save; the location is then remembered.</div>
       </section>
+
+      <details class="panel" open>
+        <summary>Daily todos</summary>
+        <div class="details-body">
+          <div class="task-form">
+            <div>
+              <label>Area</label>
+              <select id="todoArea">
+                <option value="research">Research</option>
+                <option value="personal">Personal</option>
+                <option value="fun">Fun</option>
+              </select>
+            </div>
+            <div>
+              <label>Todo</label>
+              <input type="text" id="todoText" placeholder="Add one concrete todo for this day">
+            </div>
+            <button class="btn" id="addTodo">Add</button>
+          </div>
+
+          <div class="task-board">
+            <div class="task-col">
+              <h3>Research</h3>
+              <div id="researchTodos"></div>
+            </div>
+            <div class="task-col">
+              <h3>Personal</h3>
+              <div id="personalTodos"></div>
+            </div>
+            <div class="task-col">
+              <h3>Fun</h3>
+              <div id="funTodos"></div>
+            </div>
+          </div>
+        </div>
+      </details>
 
       <details class="panel">
         <summary>Week setup</summary>
@@ -524,9 +575,12 @@ const OLD_LS = "weekly_research_flow_simple_v1";
 const LS = "focus_trace_daily_v2";
 const COLORS = ["#2f6f5e", "#3d6687", "#b9822e", "#a5522f", "#6f6a60"];
 const EMBEDDED_XLSX_SESSIONS = [];
+const AREAS = ["research", "personal", "fun"];
+const AREA_LABELS = { research: "Research", personal: "Personal", fun: "Fun" };
 let data = {
   weekStart: "",
   tasks: { research: [], personal: [], fun: [] },
+  dailyTodos: {},
   sessions: []
 };
 let focusVal = 4;
@@ -611,6 +665,69 @@ function escapeHtml(s){
   }[c]));
 }
 function uid(){ return Date.now() + Math.floor(Math.random() * 1000); }
+function emptyTasks(){ return { research: [], personal: [], fun: [] }; }
+function normalizeTask(x){
+  return {
+    id: (typeof x.id === "number" ? x.id : (x.id !== undefined && x.id !== "" && Number.isFinite(+x.id) ? +x.id : uid())),
+    text: x.text || x.title || "",
+    done: !!x.done
+  };
+}
+function isAreaTaskShape(tasks){
+  return tasks && AREAS.some(area => Array.isArray(tasks[area]));
+}
+function normalizeAreaTasks(tasks){
+  const out = emptyTasks();
+  AREAS.forEach(area => out[area] = ((tasks && tasks[area]) || []).map(normalizeTask).filter(x => x.text));
+  return out;
+}
+function normalizeDailyTodos(tasks){
+  const out = {};
+  Object.entries(tasks || {}).forEach(([date, byArea]) => {
+    out[date] = emptyTasks();
+    AREAS.forEach(area => out[date][area] = ((byArea && byArea[area]) || []).map(normalizeTask).filter(x => x.text));
+  });
+  return out;
+}
+function weeklyTasksFromDailyTodos(tasks){
+  const out = emptyTasks();
+  Object.values(tasks || {}).forEach(byArea => {
+    AREAS.forEach(area => {
+      ((byArea && byArea[area]) || []).forEach(x => out[area].push(normalizeTask(x)));
+    });
+  });
+  return out;
+}
+function todosForDate(date){
+  const d = date || selectedDate();
+  if(!data.dailyTodos || isAreaTaskShape(data.dailyTodos)) data.dailyTodos = normalizeDailyTodos({});
+  if(!data.dailyTodos[d]) data.dailyTodos[d] = emptyTasks();
+  AREAS.forEach(area => { if(!Array.isArray(data.dailyTodos[d][area])) data.dailyTodos[d][area] = []; });
+  return data.dailyTodos[d];
+}
+function allTodosForDate(date){
+  const byArea = todosForDate(date);
+  return AREAS.flatMap(area => byArea[area].map(todo => ({ ...todo, area, label: AREA_LABELS[area] })));
+}
+function findTodo(date, id){
+  if(!id) return null;
+  return allTodosForDate(date).find(todo => String(todo.id) === String(id)) || null;
+}
+function bestTodoMatch(date, event, note){
+  const text = `${event || ""} ${note || ""}`.trim().toLowerCase();
+  if(!text) return null;
+  const personal = document.getElementById("personalChk")?.checked;
+  const inferred = personal ? "personal" : ({ "Research / work": "research", "Personal / life": "personal", "Fun": "fun" }[inferCategory({ event, note })] || "");
+  const todos = allTodosForDate(date).filter(todo => !todo.done);
+  const direct = todos.find(todo => {
+    const t = todo.text.toLowerCase();
+    return t && (text.includes(t) || t.includes(text));
+  });
+  if(direct) return direct;
+  const areaTodos = todos.filter(todo => todo.area === inferred);
+  if(areaTodos.length) return areaTodos[0];
+  return todos[0] || null;
+}
 function normalizeSession(x){
   const personal = !!x.personal;
   const focus = (personal || x.focus == null) ? null : Number(x.focus);
@@ -625,6 +742,9 @@ function normalizeSession(x){
     personal,
     focus,
     note: x.note || "",
+    todoId: x.todoId || "",
+    todoArea: x.todoArea || "",
+    todoText: x.todoText || "",
     startHour: Number(x.startHour || (x.start ? x.start.split(":")[0] : 0))
   };
 }
@@ -657,6 +777,7 @@ function resetSessionForm(){
   document.getElementById("start").value = "";
   document.getElementById("end").value = "";
   document.getElementById("event").value = "";
+  document.getElementById("todoSelect").value = "auto";
   document.getElementById("note").value = "";
   document.getElementById("add").textContent = "Add daily item";
   document.getElementById("cancelEdit").style.display = "none";
@@ -667,7 +788,8 @@ function resetSessionForm(){
 function migrateOldShape(old){
   const migrated = {
     weekStart: old.weekStart || mondayOf(todayISO()),
-    tasks: { research: [], personal: [], fun: [] },
+    tasks: emptyTasks(),
+    dailyTodos: {},
     sessions: (old.sessions || []).map(normalizeSession)
   };
   if(old.weeklyGoal) migrated.tasks.research.push({ id: uid(), text: old.weeklyGoal, done: false });
@@ -679,9 +801,11 @@ function load(){
     const current = JSON.parse(localStorage.getItem(LS));
     if(current) {
       const sessions = mergeEmbeddedSessions((current.sessions || []).map(normalizeSession));
+      const currentTasksAreWeekly = isAreaTaskShape(current.tasks);
       data = {
         weekStart: current.weekStart || mondayOf(todayISO()),
-        tasks: current.tasks || { research: [], personal: [], fun: [] },
+        tasks: currentTasksAreWeekly ? normalizeAreaTasks(current.tasks) : normalizeAreaTasks(current.weeklyTasks || weeklyTasksFromDailyTodos(current.tasks || {})),
+        dailyTodos: normalizeDailyTodos(current.dailyTodos || (currentTasksAreWeekly ? {} : current.tasks || {})),
         sessions
       };
       save();
@@ -700,6 +824,8 @@ function load(){
   } catch(e) {}
 
   data.weekStart = mondayOf(todayISO());
+  data.tasks = emptyTasks();
+  data.dailyTodos = {};
   data.sessions = mergeEmbeddedSessions([]);
   save();
 }
@@ -739,6 +865,9 @@ function init(){
   };
   document.getElementById("event").addEventListener("input", autoPersonal);
   document.getElementById("note").addEventListener("input", autoPersonal);
+  document.getElementById("event").addEventListener("input", renderTodoOptions);
+  document.getElementById("note").addEventListener("input", renderTodoOptions);
+  document.getElementById("personalChk").addEventListener("change", renderTodoOptions);
   ["start","end"].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener("blur", () => { const t = parseTimeInput(el.value); if(t) el.value = t; });
@@ -774,6 +903,8 @@ document.getElementById("add").onclick = () => {
   const ongoing = endBlank;                                  // no end yet
   const hrs = ongoing ? 0 : +hoursBetween(start,end).toFixed(2);
   const personal = document.getElementById("personalChk").checked;
+  const pickedTodoId = document.getElementById("todoSelect").value;
+  const linkedTodo = pickedTodoId === "auto" ? bestTodoMatch(date, event, note) : findTodo(date, pickedTodoId);
   const session = {
     id: editingId || uid(),
     date,
@@ -785,6 +916,9 @@ document.getElementById("add").onclick = () => {
     personal,
     focus: (personal || ongoing) ? null : focusVal,          // ongoing: focus not required
     note,
+    todoId: linkedTodo ? linkedTodo.id : "",
+    todoArea: linkedTodo ? linkedTodo.area : "",
+    todoText: linkedTodo ? linkedTodo.text : "",
     startHour: +start.split(":")[0]
   };
   session.category = personal ? "Personal / life" : inferCategory(session);
@@ -809,20 +943,44 @@ document.getElementById("addTask").onclick = () => {
   const area = document.getElementById("taskArea").value;
   const text = document.getElementById("taskText").value.trim();
   if(!text) return;
+  data.tasks = normalizeAreaTasks(data.tasks);
   data.tasks[area].push({ id: uid(), text, done: false });
   document.getElementById("taskText").value = "";
   save();
-  renderTasks();
+  render();
 };
 function toggleTask(area,id){
+  data.tasks = normalizeAreaTasks(data.tasks);
   data.tasks[area] = data.tasks[area].map(x => x.id === id ? { ...x, done: !x.done } : x);
   save();
-  renderTasks();
+  render();
 }
 function deleteTask(area,id){
+  data.tasks = normalizeAreaTasks(data.tasks);
   data.tasks[area] = data.tasks[area].filter(x => x.id !== id);
   save();
-  renderTasks();
+  render();
+}
+document.getElementById("addTodo").onclick = () => {
+  const area = document.getElementById("todoArea").value;
+  const text = document.getElementById("todoText").value.trim();
+  if(!text) return;
+  todosForDate(selectedDate())[area].push({ id: uid(), text, done: false });
+  document.getElementById("todoText").value = "";
+  save();
+  render();
+};
+function toggleTodo(date,area,id){
+  const byArea = todosForDate(date);
+  byArea[area] = byArea[area].map(x => x.id === id ? { ...x, done: !x.done } : x);
+  save();
+  render();
+}
+function deleteTodo(date,area,id){
+  const byArea = todosForDate(date);
+  byArea[area] = byArea[area].filter(x => x.id !== id);
+  save();
+  render();
 }
 function delS(id){
   if(editingId === id) resetSessionForm();
@@ -842,6 +1000,7 @@ function editS(id){
   setFocus(hasScore(item) ? item.focus : null);
   personalTouched = true;
   setPersonal(!!item.personal);
+  renderTodoOptions(item.todoId || "auto");
   document.getElementById("add").textContent = "Update daily item";
   document.getElementById("cancelEdit").style.display = "";
   document.getElementById("event").focus();
@@ -849,11 +1008,27 @@ function editS(id){
 }
 window.toggleTask = toggleTask;
 window.deleteTask = deleteTask;
+window.toggleTodo = toggleTodo;
+window.deleteTodo = deleteTodo;
 window.delS = delS;
 window.editS = editS;
 
+function renderTodoOptions(forceValue){
+  const select = document.getElementById("todoSelect");
+  const current = forceValue || select.value || "auto";
+  const date = selectedDate();
+  const auto = bestTodoMatch(date, document.getElementById("event").value, document.getElementById("note").value);
+  const todos = allTodosForDate(date);
+  select.innerHTML = [
+    `<option value="auto">Auto match${auto ? `: ${escapeHtml(auto.label)} / ${escapeHtml(auto.text)}` : ""}</option>`,
+    `<option value="">No linked todo</option>`,
+    ...todos.map(todo => `<option value="${todo.id}">${escapeHtml(todo.label)} / ${escapeHtml(todo.text)}${todo.done ? " (done)" : ""}</option>`)
+  ].join("");
+  select.value = [...select.options].some(o => o.value === String(current)) ? String(current) : "auto";
+}
 function renderTasks(){
-  ["research", "personal", "fun"].forEach(area => {
+  data.tasks = normalizeAreaTasks(data.tasks);
+  AREAS.forEach(area => {
     const target = document.getElementById(`${area}Tasks`);
     const list = data.tasks[area] || [];
     target.innerHTML = list.length ? list.map(x => `
@@ -865,6 +1040,22 @@ function renderTasks(){
     `).join("") : '<div class="empty" style="padding:12px 0">No tasks yet.</div>';
   });
 }
+function renderTodos(){
+  const date = selectedDate();
+  const tasks = todosForDate(date);
+  AREAS.forEach(area => {
+    const target = document.getElementById(`${area}Todos`);
+    const list = tasks[area] || [];
+    target.innerHTML = list.length ? list.map(x => `
+      <div class="task-item">
+        <input type="checkbox" ${x.done ? "checked" : ""} onchange="toggleTodo('${date}','${area}',${x.id})">
+        <span class="${x.done ? "done" : ""}">${escapeHtml(x.text)}</span>
+        <button class="btn icon" onclick="deleteTodo('${date}','${area}',${x.id})">×</button>
+      </div>
+    `).join("") : '<div class="empty" style="padding:12px 0">No todos yet.</div>';
+  });
+  renderTodoOptions();
+}
 function renderDaily(){
   const d = selectedDate();
   const day = data.sessions
@@ -875,6 +1066,7 @@ function renderDaily(){
       <div class="time">${timeDurationFocusLabel(x)}</div>
       <div>
         <div class="event">${escapeHtml(x.event || x.category)}</div>
+        ${x.todoText ? `<div class="todo-pill">${escapeHtml(AREA_LABELS[x.todoArea] || x.todoArea || "Todo")} / ${escapeHtml(x.todoText)}</div>` : ""}
         ${x.note ? `<div class="note">${escapeHtml(x.note)}</div>` : ""}
       </div>
       <div class="score">${focusDots(x)}</div>
@@ -887,6 +1079,7 @@ function renderDaily(){
 }
 function dashboardDates(){
   const dates = new Set(data.sessions.map(x => x.date));
+  Object.keys(data.dailyTodos || {}).forEach(d => dates.add(d));
   dates.add(dashboardDate);
   return [...dates].sort((a,b) => b.localeCompare(a));
 }
@@ -961,7 +1154,7 @@ function renderDashboard(){
     <tr>
       <td>${x.date.slice(5)}</td>
       <td>${x.start}–${x.end || "…"}</td>
-      <td>${escapeHtml(x.event || x.category)}</td>
+      <td>${escapeHtml(x.event || x.category)}${x.todoText ? `<div class="todo-pill">${escapeHtml(AREA_LABELS[x.todoArea] || x.todoArea || "Todo")} / ${escapeHtml(x.todoText)}</div>` : ""}</td>
       <td>${x.hrs.toFixed(1)}</td>
       <td>${focusDots(x)}</td>
       <td><button class="btn icon" onclick="delS(${x.id})">×</button></td>
@@ -973,25 +1166,35 @@ function render(){
   document.getElementById("weekRange").textContent = `${ws} — ${addDays(ws,6)}`;
   document.getElementById("weekStart").value = ws;
   renderTasks();
+  renderTodos();
   renderDaily();
   renderDashboard();
 }
 function weeklyPrompt(){
   const ws = data.weekStart || mondayOf(todayISO());
   const week = data.sessions.filter(inWeek).sort((a,b) => (a.date + a.start).localeCompare(b.date + b.start));
-  const taskLines = ["research", "personal", "fun"].map(area => {
-    const items = (data.tasks[area] || []).map(x => `${x.done ? "[x]" : "[ ]"} ${x.text}`).join("\n");
-    return `${area.toUpperCase()}:\n${items || "- none"}`;
+  const weeklyTaskLines = AREAS.map(area => {
+    const items = ((data.tasks && data.tasks[area]) || []).map(x => `${x.done ? "[x]" : "[ ]"} ${x.text}`).join("\n");
+    return `${AREA_LABELS[area]}:\n${items || "- none"}`;
   }).join("\n\n");
+  const taskDays = Object.keys(data.dailyTodos || {}).filter(d => d >= ws && d <= addDays(ws, 6)).sort();
+  const todoLines = taskDays.length ? taskDays.map(d => {
+    const byArea = todosForDate(d);
+    const lines = AREAS.flatMap(area => (byArea[area] || []).map(x => `${x.done ? "[x]" : "[ ]"} ${AREA_LABELS[area]}: ${x.text}`));
+    return `${d}:\n${lines.join("\n") || "- none"}`;
+  }).join("\n\n") : "- none";
   return `Analyze my weekly focus trace.
 
 Week: ${ws} — ${addDays(ws,6)}
 
-Tasks:
-${taskLines}
+Weekly setup:
+${weeklyTaskLines}
+
+Daily todos:
+${todoLines}
 
 Sessions:
-${week.map(x => `- ${x.date} ${promptTimeLabel(x)} | ${x.category} | ${hasScore(x) ? `focus ${x.focus}/5` : (isPersonal(x) ? "personal time" : "n/a")} | ${x.event}${x.note ? ` | ${x.note}` : ""}`).join("\n")}
+${week.map(x => `- ${x.date} ${promptTimeLabel(x)} | ${x.category} | ${hasScore(x) ? `focus ${x.focus}/5` : (isPersonal(x) ? "personal time" : "n/a")} | ${x.event}${x.todoText ? ` | todo: ${AREA_LABELS[x.todoArea] || x.todoArea} / ${x.todoText}` : ""}${x.note ? ` | ${x.note}` : ""}`).join("\n")}
 
 Please give:
 1. Main weekly pattern.
@@ -1014,7 +1217,7 @@ document.getElementById("export").onclick = () => {
    Real .xlsx engine (dependency-free) + File System Access sync
    Genuine OOXML so openpyxl / pandas / Codex can read it on disk.
    ============================================================ */
-const XLSX_HEADERS = ["Date","From","To","Duration Hours","Focus","Event","Notes","Category"];
+const XLSX_HEADERS = ["Date","From","To","Duration Hours","Focus","Event","Notes","Category","Todo Area","Todo"];
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -1120,7 +1323,7 @@ async function readXlsxToday(bytes){
     const category = str(get(cells, "Category")) || "Research / work";
     const personal = /personal/i.test(category);
     const focusNum = (focusCell && focusCell.value !== "" && focusCell.value != null) ? num(focusCell) : null;
-    sessions.push({ id: uid(), date, start, end, hrs, personal, focus: personal ? null : focusNum, event, note: str(get(cells, "Notes")), category, startHour: +start.split(":")[0] });
+    sessions.push({ id: uid(), date, start, end, hrs, personal, focus: personal ? null : focusNum, event, note: str(get(cells, "Notes")), category, todoArea: str(get(cells, "Todo Area")), todoText: str(get(cells, "Todo")), startHour: +start.split(":")[0] });
   }
   return sessions;
 }
@@ -1169,7 +1372,7 @@ function buildXlsx(sessions){
 
   // Sheet 1: Sessions (full history)
   const log = [XLSX_HEADERS.map(S)];
-  rows.forEach(x => log.push([S(x.date), S(x.start || ""), S(x.end || ""), N(+(x.hrs || 0)), hasScore(x) ? N(+x.focus) : S(""), S(x.event || ""), S(x.note || ""), S(x.category || "")]));
+  rows.forEach(x => log.push([S(x.date), S(x.start || ""), S(x.end || ""), N(+(x.hrs || 0)), hasScore(x) ? N(+x.focus) : S(""), S(x.event || ""), S(x.note || ""), S(x.category || ""), S(AREA_LABELS[x.todoArea] || x.todoArea || ""), S(x.todoText || "")]));
 
   // Aggregates (all-time)
   const totalH = rows.reduce((a, b) => a + (b.hrs || 0), 0);
@@ -1299,7 +1502,11 @@ document.getElementById("importFile").onchange = async e => {
       const imported = JSON.parse(text);
       if(imported.sessions){
         const added = mergeSessions(imported.sessions);
-        if(imported.tasks) data.tasks = imported.tasks;
+        if(imported.tasks) {
+          if(isAreaTaskShape(imported.tasks)) data.tasks = normalizeAreaTasks(imported.tasks);
+          else data.dailyTodos = normalizeDailyTodos(imported.tasks);
+        }
+        if(imported.dailyTodos) data.dailyTodos = normalizeDailyTodos(imported.dailyTodos);
         save(); render();
         alert(`Imported ${added} new record${added===1?"":"s"} from ${f.name}.`);
       } else {
