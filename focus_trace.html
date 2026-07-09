@@ -351,9 +351,44 @@
     color: var(--muted);
   }
   .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background:#fff; }
+  .sched-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .sched-row:first-of-type { border-top: none; }
+  .sched-time {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--blue);
+    font-weight: 700;
+    width: 52px;
+    flex-shrink: 0;
+  }
+  .sched-text { flex: 1; min-width: 0; }
+  .sched-form { display: grid; grid-template-columns: 100px minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-bottom: 4px; }
+  .event-form { display: grid; grid-template-columns: 150px 90px minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-bottom: 10px; }
+  .event-day { margin-top: 12px; }
+  .event-day h3 { margin: 0 0 2px; font-size: 13px; }
+  .checkin-grid { display: grid; grid-template-columns: 120px 120px 1fr; gap: 10px; align-items: end; }
+  .checkin-status { margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .health-row {
+    display: grid;
+    grid-template-columns: 44px 1fr 52px 26px;
+    gap: 8px;
+    align-items: center;
+    margin: 7px 0;
+    font-size: 12px;
+  }
+  .health-row .name { font-weight: 700; }
+  .health-row .val { text-align: right; font-family: var(--mono); color: var(--muted); }
+  .health-row .ex { text-align: center; }
   @media (max-width: 900px) {
     .main-grid, .task-board { grid-template-columns: 1fr; }
-    .session-form, .row3 { grid-template-columns: 1fr; }
+    .session-form, .row3, .event-form, .checkin-grid, .sched-form { grid-template-columns: 1fr; }
     .trace-head { align-items: stretch; flex-direction: column; }
     .trace-head .date-field { width: 100%; }
   }
@@ -389,6 +424,16 @@
             <label>Trace date</label>
             <input type="date" id="date">
           </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label>Schedule · meetings &amp; appointments for this date</label>
+          <div class="sched-form">
+            <input type="text" id="schedTime" inputmode="numeric" autocomplete="off" placeholder="14:00 (optional)">
+            <input type="text" id="schedText" placeholder="e.g. Group meeting / coffee with Amy">
+            <button class="btn" id="addSched">Add</button>
+          </div>
+          <div id="daySchedule"></div>
         </div>
 
         <div class="session-form">
@@ -440,11 +485,34 @@
         <div class="actions" style="margin-top:16px">
           <button class="btn primary" id="downloadXlsx" style="width:auto;padding:10px 13px">Download XLSX</button>
           <button class="btn" id="export">Export JSON</button>
-          <button class="btn" id="importBtn">Import XSLS</button>
+          <button class="btn" id="importBtn">Import backup</button>
           <input type="file" id="importFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.json,application/json" style="display:none">
         </div>
         <div class="sub" id="xlsxStatus" style="margin-top:10px;text-align:left">First click on Download XLSX lets you choose where to save; the location is then remembered.</div>
       </section>
+
+      <details class="panel" open>
+        <summary>Daily check-in · sleep &amp; exercise</summary>
+        <div class="details-body">
+          <div class="checkin-grid">
+            <div>
+              <label>In bed (last night)</label>
+              <input type="text" id="bedTime" inputmode="numeric" autocomplete="off" placeholder="23:30">
+            </div>
+            <div>
+              <label>Woke up</label>
+              <input type="text" id="wakeTime" inputmode="numeric" autocomplete="off" placeholder="7:30">
+            </div>
+            <div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;padding:11px 0">
+                <input type="checkbox" id="exerciseChk" style="width:auto;margin:0">
+                <span>Exercised on this date</span>
+              </label>
+            </div>
+          </div>
+          <div class="checkin-status" id="checkinStatus"></div>
+        </div>
+      </details>
 
       <details class="panel" open>
         <summary>Daily todos</summary>
@@ -521,10 +589,22 @@
             </div>
           </div>
 
+          <div style="margin-top:18px">
+            <label>Week events · meetings, dinners, deadlines</label>
+            <div class="event-form">
+              <input type="date" id="eventDate">
+              <input type="text" id="eventTime" inputmode="numeric" autocomplete="off" placeholder="time?">
+              <input type="text" id="eventText" placeholder="e.g. Advisor meeting / dinner with Yu / paper deadline">
+              <button class="btn" id="addEvent">Add</button>
+            </div>
+            <div id="weekEvents"></div>
+          </div>
+
           <div class="actions" style="margin-top:16px">
             <button class="btn primary" id="saveWeek">Save week setup</button>
-            <button class="btn" id="copyWeek">Copy week</button>
+            <button class="btn" id="copyWeek">Copy AI prompt</button>
           </div>
+          <div class="sub" style="margin-top:10px;text-align:left">Copy AI prompt bundles this week's plan, events, sessions, sleep and exercise into one prompt — paste it into Claude/ChatGPT for a weekly review.</div>
         </div>
       </details>
     </main>
@@ -539,6 +619,11 @@
           </details>
 
           <div class="stats" id="stats"></div>
+
+          <div class="panel" style="padding:14px;margin:0 0 18px">
+            <h2>Week health · sleep &amp; exercise</h2>
+            <div id="weekHealth"></div>
+          </div>
 
           <div class="panel hour-strip-panel">
             <h2>Focus by hour of day</h2>
@@ -581,8 +666,13 @@ let data = {
   weekStart: "",
   tasks: { research: [], personal: [], fun: [] },
   dailyTodos: {},
+  events: [],
+  checkins: {},
   sessions: []
 };
+const SLEEP_GOAL_H = 8;
+const EXERCISE_GOAL_DAYS = 3;
+const EXERCISE_RE = /exercis|gym|run\b|running|jog|badminton|basketball|tennis|swim|yoga|workout|climb|hik(e|ing)|soccer|bike|cycling|健身|跑步|运动|羽毛球|篮球|游泳|骑车|爬山/i;
 let focusVal = 4;
 let editingId = null;
 let personalTouched = false;
@@ -689,6 +779,53 @@ function normalizeDailyTodos(tasks){
   });
   return out;
 }
+function normalizeEvent(x){
+  return {
+    id: (typeof x.id === "number" ? x.id : (x.id !== undefined && x.id !== "" && Number.isFinite(+x.id) ? +x.id : uid())),
+    date: String(x.date || "").slice(0, 10),
+    time: x.time || "",
+    text: x.text || x.event || ""
+  };
+}
+function normalizeEvents(list){
+  return (Array.isArray(list) ? list : []).map(normalizeEvent).filter(x => x.text && x.date);
+}
+function normalizeCheckin(x){
+  return {
+    bed: x.bed || "",
+    wake: x.wake || "",
+    exercise: (x.exercise === true || x.exercise === false) ? x.exercise : null
+  };
+}
+function normalizeCheckins(obj){
+  const out = {};
+  Object.entries(obj || {}).forEach(([d, c]) => { if(d) out[String(d).slice(0,10)] = normalizeCheckin(c || {}); });
+  return out;
+}
+function eventsForDate(d){
+  return (data.events || []).filter(x => x.date === d).sort((a,b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+}
+function checkinFor(d){
+  if(!data.checkins) data.checkins = {};
+  if(!data.checkins[d]) data.checkins[d] = { bed: "", wake: "", exercise: null };
+  return data.checkins[d];
+}
+function sleepHours(c){
+  if(!c || !c.bed || !c.wake) return null;
+  return +hoursBetween(c.bed, c.wake).toFixed(1);
+}
+function exerciseAuto(d){
+  return data.sessions.some(x => x.date === d && EXERCISE_RE.test(`${x.event || ""} ${x.note || ""}`));
+}
+function exercised(d){
+  const c = (data.checkins || {})[d];
+  if(c && (c.exercise === true || c.exercise === false)) return c.exercise;
+  return exerciseAuto(d);
+}
+function weekDays(anchor){
+  const ws = mondayOf(anchor || todayISO());
+  return Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+}
 function weeklyTasksFromDailyTodos(tasks){
   const out = emptyTasks();
   Object.values(tasks || {}).forEach(byArea => {
@@ -790,6 +927,8 @@ function migrateOldShape(old){
     weekStart: old.weekStart || mondayOf(todayISO()),
     tasks: emptyTasks(),
     dailyTodos: {},
+    events: normalizeEvents(old.events),
+    checkins: normalizeCheckins(old.checkins),
     sessions: (old.sessions || []).map(normalizeSession)
   };
   if(old.weeklyGoal) migrated.tasks.research.push({ id: uid(), text: old.weeklyGoal, done: false });
@@ -806,6 +945,8 @@ function load(){
         weekStart: current.weekStart || mondayOf(todayISO()),
         tasks: currentTasksAreWeekly ? normalizeAreaTasks(current.tasks) : normalizeAreaTasks(current.weeklyTasks || weeklyTasksFromDailyTodos(current.tasks || {})),
         dailyTodos: normalizeDailyTodos(current.dailyTodos || (currentTasksAreWeekly ? {} : current.tasks || {})),
+        events: normalizeEvents(current.events),
+        checkins: normalizeCheckins(current.checkins),
         sessions
       };
       save();
@@ -826,6 +967,8 @@ function load(){
   data.weekStart = mondayOf(todayISO());
   data.tasks = emptyTasks();
   data.dailyTodos = {};
+  data.events = [];
+  data.checkins = {};
   data.sessions = mergeEmbeddedSessions([]);
   save();
 }
@@ -850,6 +993,17 @@ function init(){
   document.getElementById("today").textContent = new Date().toDateString();
   document.getElementById("date").value = todayISO();
   document.getElementById("weekStart").value = data.weekStart;
+  document.getElementById("eventDate").value = todayISO();
+  ["bedTime","wakeTime"].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener("blur", () => { const t = parseTimeInput(el.value); if(el.value.trim() && !t) return; el.value = t; saveSleep(); });
+  });
+  document.getElementById("exerciseChk").addEventListener("change", () => {
+    checkinFor(selectedDate()).exercise = document.getElementById("exerciseChk").checked;
+    save();
+    renderCheckin();
+    renderDashboard();
+  });
   document.querySelectorAll("#focus button").forEach(b => {
     b.onclick = () => { setFocus(b.dataset.v); };
   });
@@ -982,6 +1136,54 @@ function deleteTodo(date,area,id){
   save();
   render();
 }
+document.getElementById("addSched").onclick = () => {
+  const text = document.getElementById("schedText").value.trim();
+  if(!text) { alert("Describe the meeting or appointment."); return; }
+  const raw = document.getElementById("schedTime").value.trim();
+  const time = parseTimeInput(raw);
+  if(raw && !time) { alert("Time isn't valid — use hour:minute like 14:00, or leave it empty."); return; }
+  data.events.push({ id: uid(), date: selectedDate(), time, text });
+  document.getElementById("schedTime").value = "";
+  document.getElementById("schedText").value = "";
+  save();
+  render();
+};
+document.getElementById("addEvent").onclick = () => {
+  const date = document.getElementById("eventDate").value;
+  const text = document.getElementById("eventText").value.trim();
+  if(!date || !text) { alert("Pick a date and describe the event."); return; }
+  const raw = document.getElementById("eventTime").value.trim();
+  const time = parseTimeInput(raw);
+  if(raw && !time) { alert("Time isn't valid — use hour:minute like 18:30, or leave it empty."); return; }
+  data.events.push({ id: uid(), date, time, text });
+  document.getElementById("eventTime").value = "";
+  document.getElementById("eventText").value = "";
+  save();
+  render();
+};
+function deleteEvent(id){
+  data.events = data.events.filter(x => x.id !== id);
+  save();
+  render();
+}
+function logEvent(id){
+  const ev = data.events.find(x => x.id === id);
+  if(!ev) return;
+  document.getElementById("date").value = ev.date;
+  document.getElementById("start").value = ev.time || "";
+  document.getElementById("end").value = "";
+  document.getElementById("event").value = ev.text;
+  render();
+  document.getElementById(ev.time ? "end" : "start").focus();
+}
+function saveSleep(){
+  const c = checkinFor(selectedDate());
+  c.bed = parseTimeInput(document.getElementById("bedTime").value) || "";
+  c.wake = parseTimeInput(document.getElementById("wakeTime").value) || "";
+  save();
+  renderCheckin();
+  renderDashboard();
+}
 function delS(id){
   if(editingId === id) resetSessionForm();
   data.sessions = data.sessions.filter(x => x.id !== id);
@@ -1012,6 +1214,8 @@ window.toggleTodo = toggleTodo;
 window.deleteTodo = deleteTodo;
 window.delS = delS;
 window.editS = editS;
+window.deleteEvent = deleteEvent;
+window.logEvent = logEvent;
 
 function renderTodoOptions(forceValue){
   const select = document.getElementById("todoSelect");
@@ -1056,6 +1260,75 @@ function renderTodos(){
   });
   renderTodoOptions();
 }
+function dayLabel(d){
+  return dateObj(d).toLocaleDateString(undefined, { weekday: "short", month: "2-digit", day: "2-digit" });
+}
+function renderSchedule(){
+  const list = eventsForDate(selectedDate());
+  document.getElementById("daySchedule").innerHTML = list.length ? list.map(x => `
+    <div class="sched-row">
+      <span class="sched-time">${x.time || "—"}</span>
+      <span class="sched-text">${escapeHtml(x.text)}</span>
+      <button class="btn small" onclick="logEvent(${x.id})" title="Prefill the trace form from this event">Log</button>
+      <button class="btn icon" onclick="deleteEvent(${x.id})">×</button>
+    </div>
+  `).join("") : '<div class="empty" style="padding:8px 0">Nothing scheduled for this date.</div>';
+}
+function renderCheckin(){
+  const d = selectedDate();
+  const c = (data.checkins || {})[d] || { bed: "", wake: "", exercise: null };
+  const bedEl = document.getElementById("bedTime");
+  const wakeEl = document.getElementById("wakeTime");
+  if(document.activeElement !== bedEl) bedEl.value = c.bed || "";
+  if(document.activeElement !== wakeEl) wakeEl.value = c.wake || "";
+  document.getElementById("exerciseChk").checked = exercised(d);
+  const hrs = sleepHours(c);
+  const auto = c.exercise == null && exerciseAuto(d);
+  const exDays = weekDays(d).filter(x => x <= todayISO()).filter(exercised).length;
+  const bits = [
+    hrs == null ? "Sleep: not logged yet" : `Sleep ${hrs.toFixed(1)}h ${hrs >= SLEEP_GOAL_H ? "✓" : `(${(SLEEP_GOAL_H - hrs).toFixed(1)}h short of ${SLEEP_GOAL_H}h)`}`,
+    exercised(d) ? `Exercise ✓${auto ? " (detected from sessions)" : ""}` : "Exercise: not yet",
+    `This week: ${exDays}/${EXERCISE_GOAL_DAYS}+ exercise days`
+  ];
+  document.getElementById("checkinStatus").textContent = bits.join("   ·   ");
+}
+function renderWeekEvents(){
+  const groups = weekDays(data.weekStart || todayISO())
+    .map(d => ({ d, list: eventsForDate(d) }))
+    .filter(x => x.list.length);
+  document.getElementById("weekEvents").innerHTML = groups.length ? groups.map(({ d, list }) => `
+    <div class="event-day">
+      <h3>${dayLabel(d)}</h3>
+      ${list.map(x => `
+        <div class="sched-row">
+          <span class="sched-time">${x.time || "—"}</span>
+          <span class="sched-text">${escapeHtml(x.text)}</span>
+          <button class="btn icon" onclick="deleteEvent(${x.id})">×</button>
+        </div>
+      `).join("")}
+    </div>
+  `).join("") : '<div class="empty" style="padding:10px 0">No events this week yet — add meetings, dinners, deadlines above.</div>';
+}
+function renderWeekHealth(){
+  const days = weekDays(dashboardDate);
+  const rows = days.map(d => {
+    const hrs = sleepHours((data.checkins || {})[d]);
+    const width = hrs == null ? 0 : Math.min(100, hrs / 10 * 100);
+    const color = hrs == null ? "#eef2f0" : (hrs >= SLEEP_GOAL_H ? "var(--accent)" : (hrs >= SLEEP_GOAL_H - 1 ? "#b9822e" : "#a5522f"));
+    return `<div class="health-row">
+      <span class="name">${dateObj(d).toLocaleDateString(undefined, { weekday: "short" })}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${width}%;background:${color}"></div></div>
+      <span class="val">${hrs == null ? "—" : hrs.toFixed(1) + "h"}</span>
+      <span class="ex" title="${exercised(d) ? "Exercised" : "No exercise logged"}">${exercised(d) ? "✓" : "·"}</span>
+    </div>`;
+  }).join("");
+  const logged = days.map(d => sleepHours((data.checkins || {})[d])).filter(h => h != null);
+  const avg = logged.length ? logged.reduce((a, b) => a + b, 0) / logged.length : null;
+  const exDays = days.filter(exercised).length;
+  document.getElementById("weekHealth").innerHTML = `
+    <div class="sub" style="text-align:left;margin-bottom:8px">week of ${weekDays(dashboardDate)[0]} · avg sleep ${avg == null ? "—" : avg.toFixed(1) + "h"} / ${SLEEP_GOAL_H}h goal · exercise ${exDays}/${EXERCISE_GOAL_DAYS}+ days</div>
+    ${rows}`;
+}
 function renderDaily(){
   const d = selectedDate();
   const day = data.sessions
@@ -1099,6 +1372,7 @@ function renderDashboardDates(){
 }
 function renderDashboard(){
   renderDashboardDates();
+  renderWeekHealth();
   const day = data.sessions.filter(x => x.date === dashboardDate);
   const totalH = day.reduce((a,b) => a + b.hrs, 0);
   const scored = day.filter(hasScore);
@@ -1167,6 +1441,9 @@ function render(){
   document.getElementById("weekStart").value = ws;
   renderTasks();
   renderTodos();
+  renderSchedule();
+  renderCheckin();
+  renderWeekEvents();
   renderDaily();
   renderDashboard();
 }
@@ -1183,24 +1460,41 @@ function weeklyPrompt(){
     const lines = AREAS.flatMap(area => (byArea[area] || []).map(x => `${x.done ? "[x]" : "[ ]"} ${AREA_LABELS[area]}: ${x.text}`));
     return `${d}:\n${lines.join("\n") || "- none"}`;
   }).join("\n\n") : "- none";
-  return `Analyze my weekly focus trace.
+  const days = weekDays(ws);
+  const weekEvents = data.events.filter(x => x.date >= ws && x.date <= addDays(ws, 6)).sort((a,b) => (a.date + (a.time || "99:99")).localeCompare(b.date + (b.time || "99:99")));
+  const eventLines = weekEvents.length ? weekEvents.map(x => `- ${x.date}${x.time ? " " + x.time : ""}: ${x.text}`).join("\n") : "- none";
+  const healthLines = days.map(d => {
+    const hrs = sleepHours((data.checkins || {})[d]);
+    return `- ${d}: sleep ${hrs == null ? "not logged" : hrs.toFixed(1) + "h"}, exercise ${exercised(d) ? "yes" : "no"}`;
+  }).join("\n");
+  return `You are my time & energy coach, in the spirit of Kabasawa Shion's "神・時間術" (do the most important work in focus peaks, protect sleep, use exercise to reset the brain).
+
+Analyze my weekly focus trace.
 
 Week: ${ws} — ${addDays(ws,6)}
+Goals: sleep >= ${SLEEP_GOAL_H}h/night; exercise >= ${EXERCISE_GOAL_DAYS} days/week (ideally daily); most important research work in focus peaks.
 
-Weekly setup:
+Weekly plan:
 ${weeklyTaskLines}
+
+Scheduled events (meetings / meals / deadlines):
+${eventLines}
 
 Daily todos:
 ${todoLines}
 
-Sessions:
+Sleep & exercise:
+${healthLines}
+
+Sessions (actual time use, focus is 1-5):
 ${week.map(x => `- ${x.date} ${promptTimeLabel(x)} | ${x.category} | ${hasScore(x) ? `focus ${x.focus}/5` : (isPersonal(x) ? "personal time" : "n/a")} | ${x.event}${x.todoText ? ` | todo: ${AREA_LABELS[x.todoArea] || x.todoArea} / ${x.todoText}` : ""}${x.note ? ` | ${x.note}` : ""}`).join("\n")}
 
-Please give:
-1. Main weekly pattern.
-2. Biggest productivity leak.
-3. Best schedule structure for next week.
-4. 3 concrete rules for next week.`;
+Please give me, concisely:
+1. Where did my time actually go vs. my weekly plan? (research / personal / fun split)
+2. When were my focus peaks, and was my most important work scheduled in them? If not, what should move?
+3. The single biggest time/energy leak this week, with one concrete fix.
+4. Sleep & exercise verdict: am I hitting ${SLEEP_GOAL_H}h/night and ${EXERCISE_GOAL_DAYS}+ exercise days? What one change would help most?
+5. Exactly 3 rules for next week (small, checkable, e.g. "no meetings before 11am").`;
 }
 function copyText(txt){
   navigator.clipboard.writeText(txt).then(() => alert("Copied."));
@@ -1376,7 +1670,42 @@ async function readXlsxBackup(bytes){
     }
   }
 
-  return { sessions, tasks, dailyTodos, weekStart, hasWeekSetup: !!weekPath, hasDailyTodos: !!todoPath };
+  const cellTime = (cell) => (!cell || cell.value === null || cell.value === "") ? "" : (cell.isString ? parseTimeInput(String(cell.value)) : fracToHHMM(cell.value));
+  const events = [];
+  const evPath = sheetPaths.events;
+  if (evPath && parts[evPath]) {
+    const evGrid = parseSheet(dec.decode(parts[evPath]), shared);
+    const evRows = sheetGridRows(evGrid);
+    for (let i = 1; i < evRows.rowIdx.length; i++) {
+      const cells = evGrid[evRows.rowIdx[i]];
+      const dCell = evRows.get(cells, "Date");
+      const date = dCell ? String(dCell.isString ? dCell.value : (looksLikeSerialDate(dCell.value) ? serialToISODate(dCell.value) : dCell.value)).slice(0, 10) : "";
+      const text = cellStr(evRows.get(cells, "Event")).trim();
+      if (!date || !text) continue;
+      events.push({ id: uid(), date, time: cellTime(evRows.get(cells, "Time")), text });
+    }
+  }
+
+  const checkins = {};
+  const ciPath = sheetPaths["check-ins"] || sheetPaths.checkins;
+  if (ciPath && parts[ciPath]) {
+    const ciGrid = parseSheet(dec.decode(parts[ciPath]), shared);
+    const ciRows = sheetGridRows(ciGrid);
+    for (let i = 1; i < ciRows.rowIdx.length; i++) {
+      const cells = ciGrid[ciRows.rowIdx[i]];
+      const dCell = ciRows.get(cells, "Date");
+      const date = dCell ? String(dCell.isString ? dCell.value : (looksLikeSerialDate(dCell.value) ? serialToISODate(dCell.value) : dCell.value)).slice(0, 10) : "";
+      if (!date) continue;
+      const exCell = ciRows.get(cells, "Exercise");
+      checkins[date] = {
+        bed: cellTime(ciRows.get(cells, "Bed")),
+        wake: cellTime(ciRows.get(cells, "Wake")),
+        exercise: exCell && cellStr(exCell) !== "" ? cellBool(exCell) : null
+      };
+    }
+  }
+
+  return { sessions, tasks, dailyTodos, events, checkins, weekStart, hasWeekSetup: !!weekPath, hasDailyTodos: !!todoPath, hasEvents: !!evPath, hasCheckins: !!ciPath };
 }
 async function readXlsxToday(bytes){
   return (await readXlsxBackup(bytes)).sessions;
@@ -1469,19 +1798,34 @@ function buildXlsx(sessions){
     });
   });
 
+  const eventsSheet = [[S("Date"), S("Time"), S("Event")]];
+  [...(data.events || [])].sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))).forEach(x => {
+    eventsSheet.push([S(x.date), S(x.time || ""), S(x.text || "")]);
+  });
+
+  const checkinSheet = [[S("Date"), S("Bed"), S("Wake"), S("Sleep Hours"), S("Exercise")]];
+  Object.keys(data.checkins || {}).sort().forEach(date => {
+    const c = data.checkins[date];
+    if(!c.bed && !c.wake && c.exercise == null) return;
+    const hrs = sleepHours(c);
+    checkinSheet.push([S(date), S(c.bed || ""), S(c.wake || ""), hrs == null ? S("") : N(hrs), S(exercised(date) ? "Yes" : "No")]);
+  });
+
   const files = [
     { name: "[Content_Types].xml", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`) },
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet5.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet6.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`) },
     { name: "_rels/.rels", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`) },
     { name: "xl/workbook.xml", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sessions" sheetId="1" r:id="rId1"/><sheet name="Dashboard" sheetId="2" r:id="rId2"/><sheet name="Week Setup" sheetId="3" r:id="rId3"/><sheet name="Daily Todos" sheetId="4" r:id="rId4"/></sheets></workbook>`) },
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sessions" sheetId="1" r:id="rId1"/><sheet name="Dashboard" sheetId="2" r:id="rId2"/><sheet name="Week Setup" sheetId="3" r:id="rId3"/><sheet name="Daily Todos" sheetId="4" r:id="rId4"/><sheet name="Events" sheetId="5" r:id="rId5"/><sheet name="Check-ins" sheetId="6" r:id="rId6"/></sheets></workbook>`) },
     { name: "xl/_rels/workbook.xml.rels", data: strBytes(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/></Relationships>`) },
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet5.xml"/><Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet6.xml"/></Relationships>`) },
     { name: "xl/worksheets/sheet1.xml", data: strBytes(sheetXmlFromGrid(log)) },
     { name: "xl/worksheets/sheet2.xml", data: strBytes(sheetXmlFromGrid(dash)) },
     { name: "xl/worksheets/sheet3.xml", data: strBytes(sheetXmlFromGrid(weekSetup)) },
-    { name: "xl/worksheets/sheet4.xml", data: strBytes(sheetXmlFromGrid(dailyTodos)) }
+    { name: "xl/worksheets/sheet4.xml", data: strBytes(sheetXmlFromGrid(dailyTodos)) },
+    { name: "xl/worksheets/sheet5.xml", data: strBytes(sheetXmlFromGrid(eventsSheet)) },
+    { name: "xl/worksheets/sheet6.xml", data: strBytes(sheetXmlFromGrid(checkinSheet)) }
   ];
   return buildZip(files);
 }
@@ -1519,13 +1863,13 @@ function downloadXlsx(){ // plain fallback -> browser Downloads folder
   a.href = URL.createObjectURL(blob);
   a.download = "focus_trace_all.xlsx";
   a.click();
-  setXlsxStatus(`Downloaded focus_trace_all.xlsx with sessions, week setup, and daily todos to your Downloads folder.`, true);
+  setXlsxStatus(`Downloaded focus_trace_all.xlsx with sessions, week setup, todos, events, and check-ins to your Downloads folder.`, true);
 }
 async function writeTo(handle){
   const w = await handle.createWritable();
   await w.write(buildXlsx(data.sessions));
   await w.close();
-  setXlsxStatus(`Saved sessions, week setup, and daily todos to ${handle.name} · ${new Date().toLocaleTimeString()}`, true);
+  setXlsxStatus(`Saved sessions, week setup, todos, events, and check-ins to ${handle.name} · ${new Date().toLocaleTimeString()}`, true);
 }
 async function saveXlsx(){
   if (!fsSupported()) { downloadXlsx(); return; }          // Safari/Firefox: normal download
@@ -1572,15 +1916,19 @@ document.getElementById("importFile").onchange = async e => {
         if(imported.weekStart) data.weekStart = imported.weekStart;
       }
       if(imported.hasDailyTodos) data.dailyTodos = normalizeDailyTodos(imported.dailyTodos);
+      if(imported.hasEvents) data.events = normalizeEvents(imported.events);
+      if(imported.hasCheckins) data.checkins = normalizeCheckins(imported.checkins);
       const added = mergeSessions(imported.sessions);
       save();
       render();
-      if(!imported.sessions.length && !imported.hasWeekSetup && !imported.hasDailyTodos) {
-        alert("No supported sheets found in that spreadsheet. Expected Sessions, Week Setup, or Daily Todos sheets.");
+      if(!imported.sessions.length && !imported.hasWeekSetup && !imported.hasDailyTodos && !imported.hasEvents && !imported.hasCheckins) {
+        alert("No supported sheets found in that spreadsheet. Expected Sessions, Week Setup, Daily Todos, Events, or Check-ins sheets.");
       } else {
         const parts = [`${added} new session${added===1?"":"s"}`];
         if(imported.hasWeekSetup) parts.push("week setup");
         if(imported.hasDailyTodos) parts.push("daily todos");
+        if(imported.hasEvents) parts.push("events");
+        if(imported.hasCheckins) parts.push("check-ins");
         alert(`Imported ${parts.join(", ")} from ${f.name}.`);
       }
     } else {
@@ -1593,6 +1941,8 @@ document.getElementById("importFile").onchange = async e => {
           else data.dailyTodos = normalizeDailyTodos(imported.tasks);
         }
         if(imported.dailyTodos) data.dailyTodos = normalizeDailyTodos(imported.dailyTodos);
+        if(imported.events) data.events = normalizeEvents(imported.events);
+        if(imported.checkins) data.checkins = normalizeCheckins(imported.checkins);
         save(); render();
         alert(`Imported ${added} new record${added===1?"":"s"} from ${f.name}.`);
       } else {
